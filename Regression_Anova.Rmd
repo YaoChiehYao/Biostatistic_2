@@ -1,0 +1,211 @@
+---
+title: "Regression_ANOVA_Test"
+author: "Yaochieh Yao"
+date: "3/10/2023"
+output:
+  html_document:
+    toc: true
+    toc_depth: 4
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+data(golub,package="multtest",quietly = T) 
+library(lmtest,quietly = T)
+library(ALL,quietly = T)
+data(ALL,package="ALL")
+```
+## Module 8 ANOVA <br>
+**Problem 1 <br>**
+On the ALL data set, consider the ANOVA on the gene with the probe “109_at”expression values on B-cell patients in 5 groups: B, B1, B2, B3 and B4.<br>
+a.Conduct the one-way ANOVA. Do the disease stages affect the mean gene
+expression value?<br>
+ANS:<br>
+Yes, the p-value 0.01082 is less than 0.05, we can conclude that disease stages do affect the mean gene expression value at "109_at " gene.
+```{r}
+# problem 1-a
+ALL5 <- ALL[,ALL$BT %in% c("B","B1","B2","B3","B4")]
+y <- exprs(ALL5)["109_at",]
+anova(lm(y ~ ALL5$BT))
+```
+<br>
+<br>
+b.From the linear model fits, find the mean gene expression value among B3
+patients. Make sure you show the summary table in your submission.
+```{r}
+# problem 1-b
+coefficients(lm(y ~ ALL5$BT-1))["ALL5$BTB3"] #6.6853
+```
+<br>
+<br>
+c.Use the pairwise comparisons at FDR=0.05 to find which group means are
+different. Show the output of your code. What is your conclusion?<br>
+ANS:<br>
+The p-value 0.01 of the B2 and B4 pair is less than 0.05; this rejects the null hypothesis of H0: μB2=μB4, so we can conclude group means of B2 and B4 is different.
+```{r}
+# problem 1-c
+pairwise.t.test(y, ALL5$BT,p.adjust.method='fdr')
+```
+<br>
+<br>
+d.Check the ANOVA model assumptions with diagnostic tests? Do we need to
+apply robust ANOVA tests here? If yes, apply the appropriate tests and state your conclusion.<br>
+ANS:<br>
+No, the p-value of the Shapiro-Wilk and BP tests are 0.1177 and 0.883. Thus,the normality and homoscedasticity assumptions are not rejected, and we don’t need to apply robust tests here.
+```{r}
+shapiro.test(residuals(lm(y ~ ALL5$BT)))
+bptest(lm(y ~ ALL5$BT), studentize = FALSE)
+```
+<br>
+<br>
+<br>
+<br>
+**Problem 2 <br>**
+Apply the nonparametric Kruskal-Wallis tests for every gene on the B-cell ALL patients in stage B, B1, B2, B3, B4 from the ALL data.<br>
+a.Use FDR adjustments at 0.05 level. How many genes are expressed different in some of the groups?
+```{r}
+ALL5 <- ALL[,ALL$BT %in% c("B","B1","B2","B3","B4")]
+pkt<-apply(exprs(ALL5),1,function(x) kruskal.test(x ~ ALL5$BT)$p.value)
+pkt.fdr<-p.adjust(p=pkt, method="fdr")<0.05
+sum(pkt.fdr)
+```
+<br>
+<br>
+b.Find the probe names for the top five genes with smallest p-values.
+Please submit your R commands together with your answers to each part of the question.
+```{r}
+# problem 2-b
+featureNames(ALL5)[order(pkt)[1:5]]
+```
+<br>
+<br>
+<br>
+<br>
+**Problem 3 <br>**
+On the ALL data set, we consider the ANOVA on the gene with the probe
+“38555_at” expression values on two factors. The first factor is the disease stages: B1, B2, B3 and B4 (we only take patients from those four stages). The second factor is the gender of the patient (stored in the variable ALL$sex).<br>
+a.Conduct the appropriate ANOVA analysis. Does any of the two factors affects the gene expression values? Are there interaction between the two factors?<br>
+ANS: <br>
+Yes, the p-value of disease stage is 1.818e-09 and hence we can conclude that the disease stages factor affects the gene expression. However, there is no statistically significant interaction between two factors.
+```{r}
+ALLBm <- ALL[,which(ALL$BT %in% c("B1","B2","B3","B4")&ALL$sex %in% c("M","F"))]
+y<-exprs(ALLBm)["38555_at",]
+Bcell<-ALLBm$BT
+Psex<-ALLBm$sex
+anova(lm(y~Bcell*Psex))
+```
+<br>
+<br>
+b.Check the ANOVA model assumption with diagnostic tests? Are any of the
+assumptions violated? <br>
+ANS: <br>
+Since the p-value of the Shapiro-Wilk and BP tests are 0.04003 and 0.2492, we reject the null hypothesis of normally distributed residuals. Therefore, the normality assumption does not hold.
+```{r}
+shapiro.test(residuals(lm(y ~ ALLBm$BT)))
+bptest(lm(y ~ ALLBm$BT), studentize = FALSE)
+```
+<br>
+<br>
+<br>
+<br>
+
+## Module 9 Regression <br>
+**Problem 1 <br>**
+On the Golub et al. (1999) data set, find the expression values for the GRO2 GRO2 oncogene and the GRO3 GRO3 oncogene.<br>
+<br>
+a.Find the correlation between the expression values of these two genes.
+```{r}
+# problem 1-a
+grep("GRO2",golub.gnames[,2]) #[1] 2714
+grep("GRO3",golub.gnames[,2]) #[1] 2715
+x<-golub[2714,]; y<- golub[2715,]
+cor(x,y)　# 0.7966283
+```
+<br>
+<br>
+b.Find the parametric 90% confident interval for the correlation with cor.test().
+```{r}
+cor.test(x,y,conf.level = 0.90)　# 90% CI is ( 0.6702984, 0.8780861)
+```
+<br>
+<br>
+c.Find the bootstrap 90% confident interval for the correlation.
+```{r}
+# problem 1-c
+nboot <- 1000; boot.cor <- matrix(0,nrow=nboot, ncol = 1) 
+data <- matrix(c(x,y),ncol=2,byrow=FALSE)
+for (i in 1:nboot){
+  dat.star <- data[sample(1:nrow(data),replace=TRUE), ]
+  boot.cor[i,] <- cor(dat.star)[2,1]}
+quantile(boot.cor[,1],c(0.050,0.950)) # 90% CI is (0.5944227,0.8906366 )
+```
+<br>
+<br>
+<br>
+<br>
+**Problem 2<br>**
+On the Golub et al. (1999) data set, we consider the correlation between the Zyxin gene expression values and each of the gene in the data set.<br>
+a.How many of the genes have correlation values less than negative 0.5? (Those genes are highly negatively correlated with Zyxin gene).
+```{r}
+grep("Zyxin",golub.gnames[,2]) #[1] 2124
+golub2<-golub[-c(2124),] # exclude Zyxin from golub
+cor.all<-apply(golub2,1,function(x) cor(x,golub[2124,]))
+sum(cor.all< -0.5) #[1] 85
+```
+<br>
+<br>
+b.Find the gene names for the top five genes that are most negatively correlated with Zyxin gene.
+```{r}
+# problem 2-b
+golub.gnames[order(cor.all)[1:5],2]
+```
+<br>
+<br>
+c.Using the correlation test, how many genes are negatively correlated with the Zyxin gene? Use a false discovery rate of 0.05. 
+```{r}
+# problem 2-c
+cortest.all <- apply(golub2,1,function(x) cor.test(x,golub[2124,],alternative="less")$p.value)
+cortest.adj <- p.adjust(p=cortest.all, method = "fdr") <0.05
+sum(cortest.adj)
+```
+<br>
+<br>
+<br>
+<br>
+**Problem 3 <br>**
+On the Golub et al. (1999) data set, regress the expression values for the GRO3 GRO3 oncogene on the expression values of the GRO2 GRO2 oncogene.<br>
+a.Is there a statistically significant linear relationship between the two genes’ expression? Use appropriate statistical analysis to make the conclusion. What proportion of the GRO3 GRO3 oncogene expression’s variation can be explained by the regression on GRO2 GRO2 oncogene expression? <br>
+ANS:<br>
+Yes, since the p-value 2.20e-09 of GRO2 is very small, we can reject the null hypothesis and conclude that GRO3 and CRO2 are in a statistically significant linear relationship.<br>
+The R squared value is 0.6346, this indicates that approximately 63.46% of the variation in the expression of the GRO3 oncogene can be explained by the linear regression on the expression of the GRO2 oncogene. In other words, those two genes are statistically highly relevant.
+```{r}
+GRO2<-golub[2714,]; GRO3<- golub[2715,]
+reg.fit<-lm(GRO3~GRO2)
+summary(reg.fit)
+```
+<br>
+<br>
+b.Find an 80% prediction interval for the GRO3 GRO3 oncogene expression when GRO2 GRO2 oncogene is not expressed (zero expression value).<br>
+ANS:<br>
+80% PI for GRO3 when GRO2 is not expressed is (-1.267563, -0.4175553)
+```{r}
+predict(reg.fit, newdata=data.frame(GRO2 =0),interval = "prediction", level = 0.8)
+```
+<br>
+<br>
+c.Check the regression model assumptions. Can we trust the statistical inferences from the regression fit? <br>
+ANS: <br>
+No, from the Normal qq-plot, the residuals slightly deviate from the normal distribution on the two ends. We further examine with the Shapiro-Wilk normality test and get the p-value 0.075, slightly missing the significant level of 0.05, and thus we cannot reject the normality null hypothesis and suggest the regression model fit is likely normally distributed.<br>
+However, the Scale-Location plot shows an apparent heteroscedasticity problem from the line head, which is not horizontal but inclines. Also, the residuals and fitted plots have some non-linear patterns in the means. Therefore, we do not trust the statistical inferences from the regression fit. Besides, we examine this by a Breusch-Pagan test and get a
+significant p-value of 1.001e-06, which reject the homoscedasticity assumptions.
+```{r}
+par(mfrow=c(3,1),mar = c(2, 2, 2, 2))
+plot(reg.fit,which=1) # Check linearity assumption
+plot(reg.fit,which=2) # Check normality assumption (qqplot the residuals)
+shapiro.test(resid(reg.fit)) # Normality test
+plot(reg.fit,which=3) # Check homoscedasticity assumption
+bptest(reg.fit,studentize = FALSE) # homoscedasticity test
+```
+<br>
+<br>
